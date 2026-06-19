@@ -3,6 +3,14 @@ const { db, testdb } = require("../db");
 
 const sendNextQuestion = require("./sendnextquestions");
 
+function escapeHtml(text) {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 async function startNewQuiz(ctx) {
   try {
     // 1. Bazadan 15 ta random savolni tortib olish
@@ -58,7 +66,6 @@ function setupQuizHandler(bot) {
   bot.callbackQuery(/^ans_(\d+)$/, async (ctx) => {
     const quiz = ctx.session.quiz;
 
-    
     // Agar foydalanuvchi eski xabardagi tugmani bossa-yu, sessiyada test bo'lmasa
     if (!quiz || !quiz.questions) {
       return ctx.answerCallbackQuery({
@@ -87,18 +94,84 @@ function setupQuizHandler(bot) {
         text: "✅ To'g'ri javob!",
         show_alert: false,
       });
+
+      // Chatdagi eski savol va rasmni o'chirib tashlaymiz
+      await ctx.deleteMessage().catch(() => {});
+
+      // Keyingi savolga o'tamiz
+      quiz.currentIndex++;
+      await sendNextQuestion(ctx);
     } else {
       await ctx.answerCallbackQuery({
         text: "❌ Noto'g'ri javob!",
         show_alert: false,
       });
-    }
 
-    // 2. Chatdagi eski savol va rasmni o'chirib tashlaymiz
+      // To'g'ri javob variantini topamiz
+      const correctOption = currentQuestion.options.find((opt) => opt.is_correct);
+      const correctContent = correctOption ? correctOption.content : "";
+      const explanation = correctOption ? correctOption.explanation : null;
+
+      // Izoh matnini shakllantiramiz (savol matni bilan birga)
+      let messageText = `❓ <b>${quiz.currentIndex + 1}-savol:</b>\n\n${escapeHtml(currentQuestion.content)}\n\n`;
+      messageText += `❌ <b>Siz tanlagan javob:</b> <s>${escapeHtml(selectedOption.content)}</s>\n`;
+      messageText += `✅ <b>To'g'ri javob:</b> <b>${escapeHtml(correctContent)}</b>\n\n`;
+
+      if (explanation && explanation.trim()) {
+        messageText += `📖 <b>Izoh:</b>\n${escapeHtml(explanation)}`;
+      } else {
+        messageText += `📖 <b>Izoh:</b> Ushbu savol uchun izoh kiritilmagan.`;
+      }
+
+      const nextKeyboard = new InlineKeyboard().text("➡️ Keyingi savol", "next_question");
+
+      // Keyingi savolga o'tish uchun indexni oshirib qo'yamiz
+      quiz.currentIndex++;
+
+      if (currentQuestion.image_url) {
+        await ctx.editMessageCaption({
+          caption: messageText,
+          reply_markup: nextKeyboard,
+          parse_mode: "HTML",
+        }).catch(async (err) => {
+          // Agar rasm yuborishda xatolik yuz berib, savol matn bo'lib ketgan bo'lsa, editMessageText ni sinab ko'ramiz
+          await ctx.editMessageText(messageText, {
+            reply_markup: nextKeyboard,
+            parse_mode: "HTML",
+          }).catch(async (err2) => {
+            // Agar u ham o'xshamasa, xabarni o'chirib yangisini yuboramiz
+            await ctx.deleteMessage().catch(() => {});
+            await ctx.reply(messageText, {
+              reply_markup: nextKeyboard,
+              parse_mode: "HTML",
+            });
+          });
+        });
+      } else {
+        await ctx.editMessageText(messageText, {
+          reply_markup: nextKeyboard,
+          parse_mode: "HTML",
+        }).catch(async (err) => {
+          await ctx.deleteMessage().catch(() => {});
+          await ctx.reply(messageText, {
+            reply_markup: nextKeyboard,
+            parse_mode: "HTML",
+          });
+        });
+      }
+    }
+  });
+
+  bot.callbackQuery("next_question", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    
+    // Agar sessiyada test ma'lumotlari bo'lmasa, hech narsa qilmaymiz
+    if (!ctx.session.quiz) return;
+
+    // Izoh xabarini o'chirib tashlaymiz
     await ctx.deleteMessage().catch(() => {});
 
-    // 3. Keyingi savolga o'tamiz
-    quiz.currentIndex++;
+    // Keyingi savolni yuboramiz
     await sendNextQuestion(ctx);
   });
 
