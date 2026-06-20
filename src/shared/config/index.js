@@ -18,6 +18,7 @@ const config = {
     database: process.env.TEST_DB_DATABASE || "trp",
   },
   backendUrl: process.env.BACKEND_URL || "http://localhost:5000",
+  localBackendPath: process.env.LOCAL_BACKEND_PATH || "c:\\Users\\SHE'ROZBEK\\Desktop\\new-test-app\\backend",
   jwt: {
     secret: process.env.JWT_SECRET,
     expirec_in: process.env.JWT_EXPIRES_IN,

@@ -72,8 +72,7 @@ async function sendNextQuestion(ctx) {
     console.log(baseUrl);
 
     // Agar lokal rejimda bo'lsak va backend fayl tizimida rasm bo'lsa, uni fayl sifatida yuboramiz (Telegram localhost linklarni yuklay olmaydi)
-    const localBackendPath =
-      "c:\\Users\\SHE'ROZBEK\\Desktop\\new-test-app\\backend";
+    const localBackendPath = config.localBackendPath;
     const localFilePath = path.join(
       localBackendPath,
       currentQuestion.image_url,
@@ -98,7 +97,7 @@ async function sendNextQuestion(ctx) {
     } else {
       console.log("Globalga kirdim");
 
-      photoInput = imageUrl;
+      photoInput = new InputFile(imageUrl);
     }
 
     try {
