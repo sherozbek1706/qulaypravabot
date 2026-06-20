@@ -19,12 +19,14 @@ async function sendNextQuestion(ctx) {
     // Natijani bazaga saqlaymiz
     try {
       const telegramId = ctx.from.id;
-      const student = await db("students").where({ telegram_id: telegramId }).first();
+      const student = await db("students")
+        .where({ telegram_id: telegramId })
+        .first();
       if (student) {
         await db("attempts").insert({
           student_id: student.id,
           correct_answers: correct,
-          total_questions: total
+          total_questions: total,
         });
       }
     } catch (dbError) {
@@ -66,19 +68,30 @@ async function sendNextQuestion(ctx) {
   if (currentQuestion.image_url) {
     let photoInput;
     const baseUrl = config.backendUrl || "http://localhost:5000";
-    
+
     // Agar lokal rejimda bo'lsak va backend fayl tizimida rasm bo'lsa, uni fayl sifatida yuboramiz (Telegram localhost linklarni yuklay olmaydi)
-    const localBackendPath = "c:\\Users\\SHE'ROZBEK\\Desktop\\new-test-app\\backend";
-    const localFilePath = path.join(localBackendPath, currentQuestion.image_url);
-    
-    if ((baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) && fs.existsSync(localFilePath)) {
+    const localBackendPath =
+      "c:\\Users\\SHE'ROZBEK\\Desktop\\new-test-app\\backend";
+    const localFilePath = path.join(
+      localBackendPath,
+      currentQuestion.image_url,
+    );
+
+    let imageUrl = currentQuestion.image_url;
+    if (!imageUrl.startsWith("http")) {
+      const cleanedBaseUrl = baseUrl.endsWith("/")
+        ? baseUrl.slice(0, -1)
+        : baseUrl;
+      const cleanedImageUrl = imageUrl.startsWith("/")
+        ? imageUrl.slice(1)
+        : imageUrl;
+      imageUrl = `${cleanedBaseUrl}/${cleanedImageUrl}`;
+      console.log(imageUrl);
+    }
+
+    if (fs.existsSync(localFilePath)) {
       photoInput = new InputFile(localFilePath);
     } else {
-      let imageUrl = currentQuestion.image_url;
-      if (!imageUrl.startsWith("http")) {
-        const separator = imageUrl.startsWith("/") ? "" : "/";
-        imageUrl = `${baseUrl}${separator}${imageUrl}`;
-      }
       photoInput = imageUrl;
     }
 
@@ -89,7 +102,10 @@ async function sendNextQuestion(ctx) {
         parse_mode: "Markdown",
       });
     } catch (photoError) {
-      console.warn("Rasm yuborishda xatolik, matn ko'rinishida yuborilmoqda:", photoError.message);
+      console.warn(
+        `Rasm yuborishda xatolik (URL: ${imageUrl}), matn ko'rinishida yuborilmoqda:`,
+        photoError.message,
+      );
       // Fallback to text message
       await ctx.reply(questionText + "\n\n*(Eslatma: Rasm yuklanmadi)*", {
         reply_markup: keyboard,
