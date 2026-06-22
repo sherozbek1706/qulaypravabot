@@ -1,6 +1,7 @@
 const { InlineKeyboard } = require("grammy");
 const { testdb } = require("../db");
 const sendNextQuestion = require("./sendnextquestions");
+const { escapeHtml } = require("../utils");
 
 function setupFoldersHandler(bot) {
   // 1. "📂 Test papkalari" tugmasi bosilganda — papkalar ro'yxatini ko'rsatamiz
@@ -19,9 +20,9 @@ function setupFoldersHandler(bot) {
         keyboard.text(`📁 ${folder.name}`, `folder_${folder.id}`).row();
       });
 
-      await ctx.reply("📂 **Test papkalarini tanlang:**", {
+      await ctx.reply("📂 <b>Test papkalarini tanlang:</b>", {
         reply_markup: keyboard,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
       });
     } catch (error) {
       console.error("Papkalarni olishda xatolik:", error);
@@ -58,10 +59,10 @@ function setupFoldersHandler(bot) {
 
       // Eski xabarni yangilaymiz
       await ctx.editMessageText(
-        `📁 **${folder.name}**\n${folder.description ? folder.description + "\n" : ""}\n📝 Testni tanlang:`,
+        `📁 <b>${escapeHtml(folder.name)}</b>\n${folder.description ? escapeHtml(folder.description) + "\n" : ""}\n📝 Testni tanlang:`,
         {
           reply_markup: keyboard,
-          parse_mode: "Markdown",
+          parse_mode: "HTML",
         }
       );
     } catch (error) {
@@ -88,9 +89,9 @@ function setupFoldersHandler(bot) {
         keyboard.text(`📁 ${folder.name}`, `folder_${folder.id}`).row();
       });
 
-      await ctx.editMessageText("📂 **Test papkalarini tanlang:**", {
+      await ctx.editMessageText("📂 <b>Test papkalarini tanlang:</b>", {
         reply_markup: keyboard,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
       });
     } catch (error) {
       console.error("Papkalarni olishda xatolik:", error);
@@ -160,8 +161,8 @@ function setupFoldersHandler(bot) {
         testTitle: test.title,
       };
 
-      await ctx.reply(`📝 **${test.title}** testi boshlandi!\n\n📊 Savollar soni: ${cleanQuizData.length}`, {
-        parse_mode: "Markdown",
+      await ctx.reply(`📝 <b>${escapeHtml(test.title)}</b> testi boshlandi!\n\n📊 Savollar soni: ${cleanQuizData.length}`, {
+        parse_mode: "HTML",
       });
 
       // Birinchi savolni yuboramiz

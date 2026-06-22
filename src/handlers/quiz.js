@@ -1,18 +1,18 @@
 const { InlineKeyboard } = require("grammy");
 const { db, testdb } = require("../db");
+const { mainMenu, quizMenu } = require("../keyboards");
+const config = require("../shared/config");
 
 const sendNextQuestion = require("./sendnextquestions");
-
-function escapeHtml(text) {
-  if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+const { escapeHtml } = require("../utils");
 
 async function startNewQuiz(ctx) {
   try {
+    // Reply keyboard ni "Testni yakunlash" ga o'zgartiramiz
+    await ctx.reply("Test boshlandi. Omad! 🎯", {
+      reply_markup: quizMenu,
+    });
+
     // 1. Bazadan 15 ta random savolni tortib olish
     const questions = await testdb("questions")
       .orderByRaw("RANDOM()")
@@ -123,7 +123,10 @@ function setupQuizHandler(bot) {
         messageText += `📖 <b>Izoh:</b> Ushbu savol uchun izoh kiritilmagan.`;
       }
 
-      const nextKeyboard = new InlineKeyboard().text("➡️ Keyingi savol", "next_question");
+      const nextKeyboard = new InlineKeyboard()
+        .text("➡️ Keyingi savol", "next_question")
+        .row()
+        .text("❌ Testni yakunlash", "stop_quiz");
 
       // Keyingi savolga o'tish uchun indexni oshirib qo'yamiz
       quiz.currentIndex++;
@@ -186,6 +189,93 @@ function setupQuizHandler(bot) {
     await startNewQuiz(ctx);
   });
 
+  async function stopQuiz(ctx) {
+    const quiz = ctx.session.quiz;
+    if (!quiz) return;
+
+    const currentIndex = quiz.currentIndex;
+    const correct = quiz.correctAnswers;
+
+    // Faol savol xabarini o'chirib tashlaymiz
+    if (quiz.lastMessageId) {
+      await ctx.api.deleteMessage(ctx.chat.id, quiz.lastMessageId).catch(() => {});
+    }
+
+    if (currentIndex > 0) {
+      let rewardAmount = 0;
+      try {
+        const telegramId = ctx.from.id;
+        const student = await db("students")
+          .where({ telegram_id: telegramId })
+          .first();
+        if (student) {
+          await db("attempts").insert({
+            student_id: student.id,
+            correct_answers: correct,
+            total_questions: currentIndex,
+          });
+
+          rewardAmount = correct * (config.rewards.correctAnswer || 30);
+          if (rewardAmount > 0) {
+            await db("students")
+              .where({ id: student.id })
+              .increment("balance", rewardAmount);
+          }
+        }
+      } catch (dbError) {
+        console.error("Natijani saqlashda xatolik:", dbError);
+      }
+
+      const restartKeyboard = new InlineKeyboard().text(
+        "🔄 Yangi test boshlash",
+        "restart_quiz",
+      );
+
+      let replyMsg = `🛑 <b>Test to'xtatildi! (Muddatidan oldin yakunlandi)</b>\n\nSiz jami <b>${currentIndex}</b> ta savolga javob berdingiz va ulardan <b>${correct}</b> tasiga to'g'ri javob berdingiz.\n`;
+      if (rewardAmount > 0) {
+        replyMsg += `💰 Hisobingizga <b>+${rewardAmount} so'm</b> qo'shildi!\n`;
+      }
+      replyMsg += `\nYana test ishlashni xohlaysizmi?`;
+
+      await ctx.reply(
+        replyMsg,
+        {
+          reply_markup: restartKeyboard,
+          parse_mode: "HTML",
+        },
+      );
+    } else {
+      await ctx.reply(
+        `🛑 <b>Test bekor qilindi.</b>\n\nHali birorta ham savolga javob bermadingiz.`,
+        {
+          reply_markup: new InlineKeyboard().text(
+            "🚀 Yangi test boshlash",
+            "restart_quiz",
+          ),
+          parse_mode: "HTML",
+        }
+      );
+    }
+
+    // Asosiy menyuni tiklaymiz
+    await ctx.reply("Menyu:", {
+      reply_markup: mainMenu,
+    });
+
+    ctx.session.quiz = null;
+  }
+
+  bot.hears("❌ Testni yakunlash", async (ctx) => {
+    await ctx.deleteMessage().catch(() => {});
+    await stopQuiz(ctx);
+  });
+
+  bot.callbackQuery("stop_quiz", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.deleteMessage().catch(() => {});
+    await stopQuiz(ctx);
+  });
+
   bot.hears("📊 Mening natijalarim", async (ctx) => {
     const telegramId = ctx.from.id;
 
@@ -201,25 +291,26 @@ function setupQuizHandler(bot) {
         .orderBy("created_at", "desc")
         .limit(10); // Show last 10 attempts
 
+      let messageText = `💰 <b>Sizning balansingiz:</b> ${student.balance || 0} so'm\n\n`;
+
       if (!attempts || attempts.length === 0) {
-        return ctx.reply("Siz hali biror marta test topshirmadingiz. Testni boshlash uchun 🚀 Testni boshlash tugmasini bosing.");
+        messageText += `📊 Siz hali biror marta test topshirmadingiz. Testni boshlash uchun 🚀 <b>Testni boshlash</b> tugmasini bosing.`;
+      } else {
+        messageText += `📊 <b>Sizning oxirgi natijalaringiz (maksimum 10 ta):</b>\n\n`;
+        attempts.forEach((att, index) => {
+          const date = new Date(att.created_at).toLocaleDateString("uz-UZ", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+          });
+          const percent = Math.round((att.correct_answers / att.total_questions) * 100);
+          messageText += `${index + 1}. 📅 ${date}\n   Natija: <b>${att.correct_answers} / ${att.total_questions}</b> (${percent}%)\n\n`;
+        });
       }
 
-      // Format attempts into text message
-      let messageText = `📊 **Sizning oxirgi natijalaringiz (maksimum 10 ta):**\n\n`;
-      attempts.forEach((att, index) => {
-        const date = new Date(att.created_at).toLocaleDateString("uz-UZ", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit"
-        });
-        const percent = Math.round((att.correct_answers / att.total_questions) * 100);
-        messageText += `${index + 1}. 📅 ${date}\n   Natija: **${att.correct_answers} / ${att.total_questions}** (${percent}%)\n\n`;
-      });
-
-      await ctx.reply(messageText, { parse_mode: "Markdown" });
+      await ctx.reply(messageText, { parse_mode: "HTML" });
     } catch (error) {
       console.error("Natijalarni olishda xatolik:", error);
       ctx.reply("Tizimda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.");

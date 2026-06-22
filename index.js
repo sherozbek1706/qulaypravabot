@@ -1,14 +1,23 @@
 const { Bot } = require("grammy");
-const { setupStartHandler, setupQuizHandler, setupFoldersHandler } = require("./src/handlers");
+const { setupStartHandler, setupQuizHandler, setupFoldersHandler, setupAdminHandler, setupWithdrawHandler, setupBonusHandler } = require("./src/handlers");
 const sessionMiddleware = require("./src/middlewares/session");
 const config = require("./src/shared/config");
+const setupCronJobs = require("./src/cron");
 const bot = new Bot(config.telegram.token);
+
+
 
 bot.use(sessionMiddleware);
 
 setupStartHandler(bot);
 setupQuizHandler(bot);
 setupFoldersHandler(bot);
+setupAdminHandler(bot);
+setupWithdrawHandler(bot);
+setupBonusHandler(bot);
+
+// Cron taymerlarni ishga tushirish
+setupCronJobs(bot);
 
 bot.catch((err) => {
   const ctx = err.ctx;
