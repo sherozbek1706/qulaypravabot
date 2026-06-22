@@ -88,13 +88,18 @@ async function sendNextQuestion(ctx) {
 
   // Variantlardan tugmalar yasaymiz
   const keyboard = new InlineKeyboard();
+  const letters = ["A", "B", "C", "D", "E"];
+  let optionsText = "";
+
   currentQuestion.options.forEach((opt, index) => {
-    // Tugmaga variant matnini (content) qo'yamiz.
-    // callback_data ga esa variantning ID'sini berib yuboramiz.
-    keyboard.text(opt.content, `ans_${opt.id}`).row();
+    const letter = letters[index] || (index + 1).toString();
+    optionsText += `\n<b>${letter})</b> ${escapeHtml(opt.content)}`;
+    
+    // Tugmaga faqat harf (A, B, C...) qo'yamiz
+    keyboard.text(letter, `ans_${opt.id}`);
   });
 
-  const questionText = `❓ <b>${quiz.currentIndex + 1}-savol:</b>\n\n${escapeHtml(currentQuestion.content)}`;
+  const questionText = `❓ <b>${quiz.currentIndex + 1}-savol:</b>\n\n${escapeHtml(currentQuestion.content)}\n${optionsText}`;
 
   // Rasm bor-yo'qligini tekshirib, shunga qarab jo'natamiz
   if (currentQuestion.image_url) {
